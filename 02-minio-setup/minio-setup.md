@@ -31,10 +31,10 @@ docker network ls | grep k3d
 Example output:
 ```
 NETWORK ID     NAME          DRIVER    SCOPE
-a3f1c2d4e5b6   k3d-viya      bridge    local
+a3f1c2d4e5b6   k3d-edu      bridge    local
 ```
 
-The network name is `k3d-viya` (pattern: `k3d-<cluster-name>`).
+The network name is `k3d-edu` (pattern: `k3d-<cluster-name>`).
 
 ---
 
@@ -44,10 +44,10 @@ Export the variable before running Compose (or add it to a `.env` file):
 
 ```bash
 # Option A — shell export
-export K3D_NETWORK=k3d-viya
+export K3D_NETWORK=k3d-edu
 
 # Option B — .env file in the same directory as docker-compose.yml
-echo "K3D_NETWORK=k3d-viya" > .env
+echo "K3D_NETWORK=k3d-edu" > .env
 ```
 
 ---
