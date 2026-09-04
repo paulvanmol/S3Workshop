@@ -1,0 +1,90 @@
+# =============================================================================
+# MinIO On-Premise S3 — Virtual Lab Setup
+# =============================================================================
+# Runs a MinIO container in the SAME Docker network that k3d uses for the
+# "edu" namespace SAS Viya deployment.
+#
+# k3d creates a Docker network named  k3d-<cluster-name>.
+# Adjust CLUSTER_NAME below to match your k3d cluster (default: "viya").
+#
+# Usage:
+#   1. Find your k3d network:
+#        docker network ls | grep k3d
+#   2. Set CLUSTER_NAME in the .env file (or export it) before running:
+#        export CLUSTER_NAME=viya
+#   3. Start MinIO:
+#        docker compose up -d
+#   4. Run the bucket-init service once to create buckets:
+#        docker compose run --rm minio-init
+#   5. Browse the MinIO console at http://localhost:9001
+#      (user: minioadmin  password: minioadmin)
+# =============================================================================
+
+name: minio-lfs
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # MinIO object storage — S3-compatible on-premise server
+  # ---------------------------------------------------------------------------
+  minio:
+    image: quay.io/minio/minio:RELEASE.2024-06-13T22-53-53Z
+    container_name: minio
+    hostname: minio                          # resolvable by SAS pods as "minio"
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER:     minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      # Logical region name — must match s3_region in SAS code
+      MINIO_REGION_NAME:   lux
+    volumes:
+      - minio-data:/data                     # persistent storage
+    ports:
+      - "9000:9000"                          # S3 API   → http://localhost:9000
+      - "9001:9001"                          # Console  → http://localhost:9001
+    networks:
+      - sasviya                              # shared network with k3d SAS Viya
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # One-shot init container — creates buckets and uploads sample data
+  # ---------------------------------------------------------------------------
+  minio-init:
+    image: quay.io/minio/mc:RELEASE.2024-06-10T16-44-15Z
+    container_name: minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - sasviya
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 minioadmin minioadmin;
+
+        mc mb --ignore-existing local/lfs-acc-01;
+        mc mb --ignore-existing local/lfs-output-01;
+
+        mc anonymous set none local/lfs-acc-01;
+        mc anonymous set none local/lfs-output-01;
+
+        echo 'Buckets ready:';
+        mc ls local;
+      "
+    restart: "no"
+
+volumes:
+  minio-data:
+    driver: local
+
+networks:
+  # Attach to the k3d cluster network so SAS Viya pods can reach MinIO
+  # by its container hostname ("minio") on port 9000.
+  # Replace "k3d-viya" with the actual k3d network name on your host.
+  sasviya:
+    external: true
+    name: ${K3D_NETWORK:-k3d-viya}
